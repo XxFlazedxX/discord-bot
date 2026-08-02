@@ -5,14 +5,37 @@ import os
 from flask import Flask, request, jsonify
 import threading
 import requests
+import json
 
 ALLOWED_USERS = [1376299488703938691, 1396417493475528774]
+
+SUPABASE_URL = "https://tknncuwzbcvlzgqqdyuz.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrbm5jdXd6YmN2bHpncXFkeXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzA0NjcsImV4cCI6MjEwMTIwNjQ2N30.Ey0DkwFQu32Rb4-rnvQxoCJZf7m8aor3cPhOGVHbowU"
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
 
 def is_allowed(interaction):
     return interaction.user.id in ALLOWED_USERS
+
+def add_command_to_supabase(command, username, reason=""):
+    url = f"{SUPABASE_URL}/rest/v1/commands"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+    data = {
+        "command": command,
+        "username": username,
+        "reason": reason
+    }
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        return response.status_code in [200, 201]
+    except:
+        return False
 
 @bot.event
 async def on_ready():
@@ -23,63 +46,59 @@ async def on_ready():
     except Exception as e:
         print(f'❌ Error: {e}')
 
-@bot.tree.command(name='ban', description='Ban a player')
+@bot.tree.command(name='ban', description='Ban a player from the game')
 @app_commands.describe(username='Player username', reason='Ban reason')
 async def ban(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
-    # Send to Roblox via HTTP
-    try:
-        response = requests.post(
-            'http://YOUR_ROBLOX_GAME_IP:PORT/ban',
-            json={'username': username, 'reason': reason},
-            timeout=2
-        )
-        await interaction.response.send_message(f'🔨 **{username}** banned! Reason: {reason}')
-    except:
-        await interaction.response.send_message(f'⚠️ Ban command sent but Roblox server not responding.')
+    if add_command_to_supabase("ban", username, reason):
+        await interaction.response.send_message(f'🔨 **{username}** banned!\n📝 Reason: {reason}')
+    else:
+        await interaction.response.send_message('❌ Failed to add ban to database.')
 
-@bot.tree.command(name='unban', description='Unban a player')
+@bot.tree.command(name='unban', description='Unban a player from the game')
 @app_commands.describe(username='Player username')
 async def unban(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
-    try:
-        response = requests.post(
-            'http://YOUR_ROBLOX_GAME_IP:PORT/unban',
-            json={'username': username},
-            timeout=2
-        )
+    if add_command_to_supabase("unban", username):
         await interaction.response.send_message(f'✅ **{username}** unbanned!')
-    except:
-        await interaction.response.send_message(f'⚠️ Unban command sent but Roblox server not responding.')
+    else:
+        await interaction.response.send_message('❌ Failed to add unban to database.')
 
-@bot.tree.command(name='kick', description='Kick a player')
+@bot.tree.command(name='kick', description='Kick a player from the game')
 @app_commands.describe(username='Player username', reason='Kick reason')
 async def kick(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
-    try:
-        response = requests.post(
-            'http://YOUR_ROBLOX_GAME_IP:PORT/kick',
-            json={'username': username, 'reason': reason},
-            timeout=2
-        )
-        await interaction.response.send_message(f'👢 **{username}** kicked! Reason: {reason}')
-    except:
-        await interaction.response.send_message(f'⚠️ Kick command sent but Roblox server not responding.')
+    if add_command_to_supabase("kick", username, reason):
+        await interaction.response.send_message(f'👢 **{username}** kicked!\n📝 Reason: {reason}')
+    else:
+        await interaction.response.send_message('❌ Failed to add kick to database.')
 
-@bot.tree.command(name='info', description='Get player info')
+@bot.tree.command(name='info', description='Get player information')
 @app_commands.describe(username='Player username')
 async def info(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
+    
+    url = f"{SUPABASE_URL}/rest/v1/commands?command=eq.ban&username=eq.{username}&select=count"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        ban_count = len(response.json()) if response.status_code == 200 else 0
+    except:
+        ban_count = 0
+    
     embed = discord.Embed(title=f'📊 Player Info: {username}', color=0x00ff00)
-    embed.add_field(name='🔨 Bans', value='0', inline=True)
-    embed.add_field(name='✅ Status', value='Clean record', inline=True)
+    embed.add_field(name='🔨 Total Bans', value=str(ban_count), inline=True)
+    embed.add_field(name='✅ Status', value='Clean record' if ban_count == 0 else 'Has bans', inline=True)
     await interaction.response.send_message(embed=embed)
 
 app = Flask(__name__)
