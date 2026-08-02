@@ -5,7 +5,6 @@ import os
 from flask import Flask, request, jsonify
 import threading
 import asyncio
-import json
 
 ALLOWED_USERS = [1376299488703938691, 1396417493475528774]
 PENDING_COMMANDS = []
@@ -25,31 +24,31 @@ async def on_ready():
     except Exception as e:
         print(f'❌ Error: {e}')
 
-@bot.tree.command(name='ban', description='Ban a player')
+@bot.tree.command(name='ban', description='Ban a player from the game')
 @app_commands.describe(username='Player username', reason='Ban reason')
 async def ban(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     PENDING_COMMANDS.append({'command': 'ban', 'username': username, 'reason': reason})
-    await interaction.response.send_message(f'🔨 {username} banned! Reason: {reason}')
+    await interaction.response.send_message(f'🔨 **{username}** banned! Reason: {reason}')
 
-@bot.tree.command(name='unban', description='Unban a player')
+@bot.tree.command(name='unban', description='Unban a player from the game')
 @app_commands.describe(username='Player username')
 async def unban(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     PENDING_COMMANDS.append({'command': 'unban', 'username': username})
-    await interaction.response.send_message(f'✅ {username} unbanned!')
+    await interaction.response.send_message(f'✅ **{username}** unbanned!')
 
-@bot.tree.command(name='kick', description='Kick a player')
+@bot.tree.command(name='kick', description='Kick a player from the game')
 @app_commands.describe(username='Player username', reason='Kick reason')
 async def kick(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     PENDING_COMMANDS.append({'command': 'kick', 'username': username, 'reason': reason})
-    await interaction.response.send_message(f'👢 {username} kicked! Reason: {reason}')
+    await interaction.response.send_message(f'👢 **{username}** kicked! Reason: {reason}')
 
-@bot.tree.command(name='info', description='Get player info')
+@bot.tree.command(name='info', description='Get player information')
 @app_commands.describe(username='Player username')
 async def info(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
@@ -65,27 +64,12 @@ app = Flask(__name__)
 def home():
     return '✅ Bot is running!'
 
-@app.route('/webhook/exploit', methods=['POST'])
-def exploit():
-    data = request.json
-    print(f'🚨 EXPLOIT: {data}')
-    channel_id = os.getenv('EXPLOIT_CHANNEL_ID')
-    if channel_id:
-        channel = bot.get_channel(int(channel_id))
-        if channel:
-            embed = discord.Embed(title='🚨 Exploit Detected!', color=0xff0000)
-            embed.add_field(name='Player', value=data.get('player', 'Unknown'))
-            embed.add_field(name='Exploit', value=data.get('exploit', 'Unknown'))
-            embed.add_field(name='Action', value=data.get('action', 'Unknown'))
-            asyncio.run_coroutine_threadsafe(channel.send(embed=embed), bot.loop)
-    return jsonify({'status': 'ok'}), 200
-
 @app.route('/roblox/pending', methods=['GET'])
 def pending():
     if PENDING_COMMANDS:
         cmd = PENDING_COMMANDS.pop(0)
-        return jsonify(cmd), 200
-    return jsonify({'command': 'none'}), 200
+        return jsonify(cmd)
+    return jsonify({'command': 'none'})
 
 def run_flask():
     port = int(os.getenv('PORT', 3000))
