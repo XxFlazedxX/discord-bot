@@ -115,7 +115,6 @@ async def info(interaction: discord.Interaction, username: str):
     embed.add_field(name='📝 Reason', value=reason, inline=False)
     await interaction.response.send_message(embed=embed)
 
-# ✅ NEW COMMAND: List all banned players
 @bot.tree.command(name='banned', description='List all permanently banned players')
 async def banned(interaction: discord.Interaction):
     if not is_allowed(interaction):
@@ -145,6 +144,21 @@ async def banned(interaction: discord.Interaction):
     embed.set_footer(text=f'Total: {len(ban_list)} banned players')
     
     await interaction.response.send_message(embed=embed)
+
+# ✅ NEW COMMAND: Send server message
+@bot.tree.command(name='servermessage', description='Send a message to all Roblox servers')
+@app_commands.describe(name='Your name/from who', message='Message to send to all players')
+async def servermessage(interaction: discord.Interaction, name: str, message: str):
+    if not is_allowed(interaction):
+        return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
+    
+    PENDING_COMMANDS.append({
+        "command": "servermessage",
+        "name": name,
+        "message": message
+    })
+    
+    await interaction.response.send_message(f'📢 Server message sent!\n**From:** {name}\n**Message:** {message}')
 
 app = Flask(__name__)
 
