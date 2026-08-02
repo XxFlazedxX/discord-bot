@@ -4,83 +4,53 @@ from discord.ext import commands
 import os
 from flask import Flask, request, jsonify
 import threading
-import requests
 import json
 
 ALLOWED_USERS = [1376299488703938691, 1396417493475528774]
-
-SUPABASE_URL = "https://tknncuwzbcvlzgqqdyuz.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrbm5jdXd6YmN2bHpncXFkeXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzA0NjcsImV4cCI6MjEwMTIwNjQ2N30.Ey0DkwFQu32Rb4-rnvQxoCJZf7m8aor3cPhOGVHbowU"
-
+BAN_FILE = "bans.json"
 PENDING_COMMANDS = []
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
 
+def load_bans():
+    if not os.path.exists(BAN_FILE):
+        return {}
+    try:
+        with open(BAN_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_bans(bans_dict):
+    try:
+        with open(BAN_FILE, 'w') as f:
+            json.dump(bans_dict, f, indent=4)
+        return True
+    except:
+        return False
+
 def is_allowed(interaction):
     return interaction.user.id in ALLOWED_USERS
 
-def add_command_to_supabase(command, username, reason=""):
-    url = f"{SUPABASE_URL}/rest/v1/commands"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "command": command,
-        "username": username,
-        "reason": reason,
-        "executed": False
-    }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        return response.status_code in [200, 201]
-    except:
-        return False
+def is_user_banned(username):
+    bans = load_bans()
+    return username.lower() in bans
 
 def add_ban_to_list(username, reason):
-    url = f"{SUPABASE_URL}/rest/v1/bans"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "username": username.lower(),
+    bans = load_bans()
+    bans[username.lower()] = {
         "reason": reason,
         "banned_at": "now"
     }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        return response.status_code in [200, 201]
-    except:
-        return False
+    return save_bans(bans)
 
 def remove_ban_from_list(username):
-    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username.lower()}"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
-    try:
-        response = requests.delete(url, headers=headers)
-        return response.status_code == 200
-    except:
-        return False
-
-def is_user_banned(username):
-    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username.lower()}"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        data = response.json()
-        return len(data) > 0
-    except:
-        return False
+    bans = load_bans()
+    if username.lower() in bans:
+        del bans[username.lower()]
+        return save_bans(bans)
+    return False
 
 @bot.event
 async def on_ready():
@@ -100,10 +70,11 @@ async def ban(interaction: discord.Interaction, username: str, reason: str = "No
     if is_user_banned(username):
         return await interaction.response.send_message(f'⚠️ **{username}** is already banned!')
     
-    if add_ban_to_list(username, reason) and add_command_to_supabase("ban", username, reason):
+    if add_ban_to_list(username, reason):
+        PENDING_COMMANDS.append({"command": "ban", "username": username, "reason": reason})
         await interaction.response.send_message(f'🔨 **{username}** permanently banned!\n📝 Reason: {reason}')
     else:
-        await interaction.response.send_message('❌ Failed to ban.')
+        await interaction.response.send_message('❌ Failed to save ban.')
 
 @bot.tree.command(name='unban', description='Unban a player')
 @app_commands.describe(username='Player username')
@@ -115,9 +86,10 @@ async def unban(interaction: discord.Interaction, username: str):
         return await interaction.response.send_message(f'⚠️ **{username}** is not banned.')
     
     if remove_ban_from_list(username):
+        PENDING_COMMANDS.append({"command": "unban", "username": username})
         await interaction.response.send_message(f'✅ **{username}** unbanned!')
     else:
-        await interaction.response.send_message('❌ Failed to unban. Check logs.')
+        await interaction.response.send_message('❌ Failed to unban.')
 
 @bot.tree.command(name='kick', description='Kick a player')
 @app_commands.describe(username='Player username', reason='Kick reason')
@@ -125,10 +97,8 @@ async def kick(interaction: discord.Interaction, username: str, reason: str = "N
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
-    if add_command_to_supabase("kick", username, reason):
-        await interaction.response.send_message(f'👢 **{username}** kicked!\n📝 Reason: {reason}')
-    else:
-        await interaction.response.send_message('❌ Failed to kick.')
+    PENDING_COMMANDS.append({"command": "kick", "username": username, "reason": reason})
+    await interaction.response.send_message(f'👢 **{username}** kicked!\n📝 Reason: {reason}')
 
 @bot.tree.command(name='info', description='Get player info')
 @app_commands.describe(username='Player username')
@@ -137,8 +107,12 @@ async def info(interaction: discord.Interaction, username: str):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
     banned = is_user_banned(username)
+    bans = load_bans()
+    reason = bans.get(username.lower(), {}).get("reason", "N/A") if banned else "Not banned"
+    
     embed = discord.Embed(title=f'📊 Player Info: {username}', color=0x00ff00)
     embed.add_field(name='🔨 Banned', value='✅ Yes' if banned else '❌ No', inline=True)
+    embed.add_field(name='📝 Reason', value=reason, inline=False)
     await interaction.response.send_message(embed=embed)
 
 app = Flask(__name__)
@@ -157,23 +131,11 @@ def pending():
 @app.route('/roblox/checkban/<username>', methods=['GET'])
 def checkban(username):
     banned = is_user_banned(username)
-    return jsonify({'banned': banned})
+    return jsonify({'banned': 'true' if banned else 'false'})
 
 @app.route('/roblox/execute/<int:record_id>', methods=['POST'])
 def execute_command(record_id):
-    url = f"{SUPABASE_URL}/rest/v1/commands?id=eq.{record_id}"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-    data = {"executed": True}
-    try:
-        response = requests.patch(url, headers=headers, json=data)
-        return jsonify({'status': 'ok'}), 200
-    except:
-        return jsonify({'status': 'error'}), 500
+    return jsonify({'status': 'ok'}), 200
 
 def run_flask():
     port = int(os.getenv('PORT', 3000))
