@@ -115,6 +115,37 @@ async def info(interaction: discord.Interaction, username: str):
     embed.add_field(name='📝 Reason', value=reason, inline=False)
     await interaction.response.send_message(embed=embed)
 
+# ✅ NEW COMMAND: List all banned players
+@bot.tree.command(name='banned', description='List all permanently banned players')
+async def banned(interaction: discord.Interaction):
+    if not is_allowed(interaction):
+        return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
+    
+    bans = load_bans()
+    if not bans:
+        return await interaction.response.send_message('📋 No players are currently banned.')
+    
+    ban_list = []
+    for username, data in bans.items():
+        reason = data.get('reason', 'No reason')
+        ban_list.append(f"🔨 **{username}** - {reason}")
+    
+    if len(ban_list) > 20:
+        display_list = ban_list[:20]
+        display_list.append(f"\n... and {len(ban_list) - 20} more.")
+        description = '\n'.join(display_list)
+    else:
+        description = '\n'.join(ban_list)
+    
+    embed = discord.Embed(
+        title='📋 Banned Players',
+        description=description,
+        color=0xff0000
+    )
+    embed.set_footer(text=f'Total: {len(ban_list)} banned players')
+    
+    await interaction.response.send_message(embed=embed)
+
 app = Flask(__name__)
 
 @app.route('/')
