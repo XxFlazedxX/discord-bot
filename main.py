@@ -12,6 +12,8 @@ ALLOWED_USERS = [1376299488703938691, 1396417493475528774]
 SUPABASE_URL = "https://tknncuwzbcvlzgqqdyuz.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrbm5jdXd6YmN2bHpncXFkeXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MzA0NjcsImV4cCI6MjEwMTIwNjQ2N30.Ey0DkwFQu32Rb4-rnvQxoCJZf7m8aor3cPhOGVHbowU"
 
+PENDING_COMMANDS = []
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
 
@@ -23,18 +25,20 @@ def add_command_to_supabase(command, username, reason=""):
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
+        "Content-Type": "application/json"
     }
     data = {
         "command": command,
         "username": username,
-        "reason": reason
+        "reason": reason,
+        "executed": False
     }
     try:
         response = requests.post(url, headers=headers, json=data)
+        print(f"📤 Supabase: {response.status_code}")
         return response.status_code in [200, 201]
-    except:
+    except Exception as e:
+        print(f"❌ Supabase error: {e}")
         return False
 
 @bot.event
@@ -85,20 +89,9 @@ async def info(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
     
-    url = f"{SUPABASE_URL}/rest/v1/commands?command=eq.ban&username=eq.{username}&select=count"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}"
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        ban_count = len(response.json()) if response.status_code == 200 else 0
-    except:
-        ban_count = 0
-    
     embed = discord.Embed(title=f'📊 Player Info: {username}', color=0x00ff00)
-    embed.add_field(name='🔨 Total Bans', value=str(ban_count), inline=True)
-    embed.add_field(name='✅ Status', value='Clean record' if ban_count == 0 else 'Has bans', inline=True)
+    embed.add_field(name='🔨 Total Bans', value='Check logs', inline=True)
+    embed.add_field(name='✅ Status', value='Unknown', inline=True)
     await interaction.response.send_message(embed=embed)
 
 app = Flask(__name__)
@@ -112,6 +105,38 @@ def exploit():
     data = request.json
     print(f'🚨 EXPLOIT: {data}')
     return jsonify({'status': 'ok'}), 200
+
+@app.route('/roblox/pending', methods=['GET'])
+def pending():
+    url = f"{SUPABASE_URL}/rest/v1/commands?executed=eq.false&order=created_at.asc&limit=1"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}"
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        if len(data) > 0:
+            return jsonify(data[0])
+        return jsonify({'command': 'none'})
+    except:
+        return jsonify({'command': 'none'})
+
+@app.route('/roblox/execute/<int:record_id>', methods=['POST'])
+def execute_command(record_id):
+    url = f"{SUPABASE_URL}/rest/v1/commands?id=eq.{record_id}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+    data = {"executed": True}
+    try:
+        response = requests.patch(url, headers=headers, json=data)
+        return jsonify({'status': 'ok'}), 200
+    except:
+        return jsonify({'status': 'error'}), 500
 
 def run_flask():
     port = int(os.getenv('PORT', 3000))
