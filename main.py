@@ -4,10 +4,9 @@ from discord.ext import commands
 import os
 from flask import Flask, request, jsonify
 import threading
-import asyncio
+import requests
 
 ALLOWED_USERS = [1376299488703938691, 1396417493475528774]
-PENDING_COMMANDS = []
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
@@ -24,31 +23,56 @@ async def on_ready():
     except Exception as e:
         print(f'❌ Error: {e}')
 
-@bot.tree.command(name='ban', description='Ban a player from the game')
+@bot.tree.command(name='ban', description='Ban a player')
 @app_commands.describe(username='Player username', reason='Ban reason')
 async def ban(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
-    PENDING_COMMANDS.append({'command': 'ban', 'username': username, 'reason': reason})
-    await interaction.response.send_message(f'🔨 **{username}** banned! Reason: {reason}')
+    
+    # Send to Roblox via HTTP
+    try:
+        response = requests.post(
+            'http://YOUR_ROBLOX_GAME_IP:PORT/ban',
+            json={'username': username, 'reason': reason},
+            timeout=2
+        )
+        await interaction.response.send_message(f'🔨 **{username}** banned! Reason: {reason}')
+    except:
+        await interaction.response.send_message(f'⚠️ Ban command sent but Roblox server not responding.')
 
-@bot.tree.command(name='unban', description='Unban a player from the game')
+@bot.tree.command(name='unban', description='Unban a player')
 @app_commands.describe(username='Player username')
 async def unban(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
-    PENDING_COMMANDS.append({'command': 'unban', 'username': username})
-    await interaction.response.send_message(f'✅ **{username}** unbanned!')
+    
+    try:
+        response = requests.post(
+            'http://YOUR_ROBLOX_GAME_IP:PORT/unban',
+            json={'username': username},
+            timeout=2
+        )
+        await interaction.response.send_message(f'✅ **{username}** unbanned!')
+    except:
+        await interaction.response.send_message(f'⚠️ Unban command sent but Roblox server not responding.')
 
-@bot.tree.command(name='kick', description='Kick a player from the game')
+@bot.tree.command(name='kick', description='Kick a player')
 @app_commands.describe(username='Player username', reason='Kick reason')
 async def kick(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
         return await interaction.response.send_message('❌ Not authorized', ephemeral=True)
-    PENDING_COMMANDS.append({'command': 'kick', 'username': username, 'reason': reason})
-    await interaction.response.send_message(f'👢 **{username}** kicked! Reason: {reason}')
+    
+    try:
+        response = requests.post(
+            'http://YOUR_ROBLOX_GAME_IP:PORT/kick',
+            json={'username': username, 'reason': reason},
+            timeout=2
+        )
+        await interaction.response.send_message(f'👢 **{username}** kicked! Reason: {reason}')
+    except:
+        await interaction.response.send_message(f'⚠️ Kick command sent but Roblox server not responding.')
 
-@bot.tree.command(name='info', description='Get player information')
+@bot.tree.command(name='info', description='Get player info')
 @app_commands.describe(username='Player username')
 async def info(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
@@ -64,12 +88,11 @@ app = Flask(__name__)
 def home():
     return '✅ Bot is running!'
 
-@app.route('/roblox/pending', methods=['GET'])
-def pending():
-    if PENDING_COMMANDS:
-        cmd = PENDING_COMMANDS.pop(0)
-        return jsonify(cmd)
-    return jsonify({'command': 'none'})
+@app.route('/webhook/exploit', methods=['POST'])
+def exploit():
+    data = request.json
+    print(f'🚨 EXPLOIT: {data}')
+    return jsonify({'status': 'ok'}), 200
 
 def run_flask():
     port = int(os.getenv('PORT', 3000))
