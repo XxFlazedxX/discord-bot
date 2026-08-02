@@ -47,7 +47,7 @@ def add_ban_to_list(username, reason):
         "Content-Type": "application/json"
     }
     data = {
-        "username": username,
+        "username": username.lower(),
         "reason": reason,
         "banned_at": "now"
     }
@@ -58,7 +58,7 @@ def add_ban_to_list(username, reason):
         return False
 
 def remove_ban_from_list(username):
-    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username}"
+    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username.lower()}"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -70,7 +70,7 @@ def remove_ban_from_list(username):
         return False
 
 def is_user_banned(username):
-    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username}&select=count"
+    url = f"{SUPABASE_URL}/rest/v1/bans?username=eq.{username.lower()}"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -91,7 +91,7 @@ async def on_ready():
     except Exception as e:
         print(f'❌ Error: {e}')
 
-@bot.tree.command(name='ban', description='Permanently ban a player from the game')
+@bot.tree.command(name='ban', description='Permanently ban a player')
 @app_commands.describe(username='Player username', reason='Ban reason')
 async def ban(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
@@ -105,7 +105,7 @@ async def ban(interaction: discord.Interaction, username: str, reason: str = "No
     else:
         await interaction.response.send_message('❌ Failed to ban.')
 
-@bot.tree.command(name='unban', description='Unban a player from the game')
+@bot.tree.command(name='unban', description='Unban a player')
 @app_commands.describe(username='Player username')
 async def unban(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
@@ -117,9 +117,9 @@ async def unban(interaction: discord.Interaction, username: str):
     if remove_ban_from_list(username):
         await interaction.response.send_message(f'✅ **{username}** unbanned!')
     else:
-        await interaction.response.send_message('❌ Failed to unban.')
+        await interaction.response.send_message('❌ Failed to unban. Check logs.')
 
-@bot.tree.command(name='kick', description='Kick a player from the game')
+@bot.tree.command(name='kick', description='Kick a player')
 @app_commands.describe(username='Player username', reason='Kick reason')
 async def kick(interaction: discord.Interaction, username: str, reason: str = "No reason"):
     if not is_allowed(interaction):
@@ -130,7 +130,7 @@ async def kick(interaction: discord.Interaction, username: str, reason: str = "N
     else:
         await interaction.response.send_message('❌ Failed to kick.')
 
-@bot.tree.command(name='info', description='Get player information')
+@bot.tree.command(name='info', description='Get player info')
 @app_commands.describe(username='Player username')
 async def info(interaction: discord.Interaction, username: str):
     if not is_allowed(interaction):
